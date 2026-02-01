@@ -1,0 +1,247 @@
+{
+  // ==========================================================================
+  // OpenClaw Configuration Template
+  // ==========================================================================
+  // Copy to ~/.openclaw/openclaw.json and customize
+  // Docs: https://docs.openclaw.ai/gateway/configuration
+  // ==========================================================================
+
+  // --------------------------------------------------------------------------
+  // Gateway Settings
+  // --------------------------------------------------------------------------
+  "gateway": {
+    "bind": "lan",
+    "port": 18789,
+    "auth": {
+      "type": "token"
+      // Token is set via OPENCLAW_GATEWAY_TOKEN environment variable
+    }
+  },
+
+  // --------------------------------------------------------------------------
+  // Model Configuration (Multi-Model Routing)
+  // --------------------------------------------------------------------------
+  "models": {
+    // Default model for general tasks
+    "default": "claude-sonnet-4-20250514",
+    
+    // Model routing by task type
+    "routing": {
+      // Planning and complex reasoning
+      "planner": "claude-sonnet-4-20250514",
+      // Code generation
+      "coder": "claude-sonnet-4-20250514",
+      // Fast, simple tasks
+      "fast": "gpt-4o-mini",
+      // Vision/multimodal tasks
+      "vision": "gpt-4o"
+    },
+
+    // Provider configuration
+    "providers": {
+      "anthropic": {
+        "enabled": true
+        // API key via ANTHROPIC_API_KEY env var
+      },
+      "openai": {
+        "enabled": true
+        // API key via OPENAI_API_KEY env var
+      },
+      "google": {
+        "enabled": false
+        // API key via GOOGLE_API_KEY env var
+      }
+    }
+  },
+
+  // --------------------------------------------------------------------------
+  // Agent Configuration
+  // --------------------------------------------------------------------------
+  "agents": {
+    "defaults": {
+      // Maximum tokens per request
+      "maxTokens": 8192,
+      
+      // Session timeout (minutes)
+      "sessionTimeout": 60,
+
+      // --------------------------------------------------------------------------
+      // Sandbox Configuration (CRITICAL for security)
+      // --------------------------------------------------------------------------
+      "sandbox": {
+        // Mode: off | non-main | all
+        // - off: no sandboxing (dangerous!)
+        // - non-main: sandbox non-main skills (recommended)
+        // - all: sandbox everything (most secure)
+        "mode": "non-main",
+
+        // Scope: session | agent | shared
+        // - session: new container per session
+        // - agent: container per agent (recommended)
+        // - shared: single shared container
+        "scope": "agent",
+
+        // Workspace access: none | ro | rw
+        "workspaceAccess": "ro",
+
+        // Docker sandbox settings
+        "docker": {
+          "image": "openclaw-sandbox:bookworm-slim",
+          "workdir": "/workspace",
+          
+          // Security hardening
+          "readOnlyRoot": true,
+          "tmpfs": ["/tmp", "/var/tmp", "/run"],
+          "network": "none",
+          "user": "1000:1000",
+          "capDrop": ["ALL"],
+          
+          // Environment
+          "env": {
+            "LANG": "C.UTF-8",
+            "HOME": "/home/sandbox"
+          },
+
+          // Resource limits
+          "pidsLimit": 256,
+          "memory": "1g",
+          "memorySwap": "2g",
+          "cpus": 1,
+
+          // ulimits
+          "ulimits": {
+            "nofile": { "soft": 1024, "hard": 2048 },
+            "nproc": 256
+          }
+        },
+
+        // Browser sandbox settings
+        "browser": {
+          "image": "openclaw-sandbox-browser:bookworm-slim",
+          "timeout": 30000
+        }
+      }
+    },
+
+    // Named agent configurations
+    "list": [
+      {
+        "id": "default",
+        "name": "Default Agent",
+        "model": "claude-sonnet-4-20250514"
+      },
+      {
+        "id": "coder",
+        "name": "Code Assistant",
+        "model": "claude-sonnet-4-20250514",
+        "sandbox": {
+          "mode": "non-main",
+          "workspaceAccess": "rw"
+        }
+      },
+      {
+        "id": "researcher",
+        "name": "Research Agent",
+        "model": "gpt-4o",
+        "sandbox": {
+          "mode": "all",
+          "docker": {
+            "network": "bridge"  // Allow network for research
+          }
+        }
+      }
+    ]
+  },
+
+  // --------------------------------------------------------------------------
+  // Skills Configuration
+  // --------------------------------------------------------------------------
+  "skills": {
+    // Recommended core skills
+    "enabled": [
+      "clawhub",      // Skill package manager (required)
+      "mcporter",     // MCP adapter (highly recommended)
+      "model-usage"   // Usage metrics
+    ],
+
+    // Skills to install on first run
+    "autoInstall": [
+      "clawhub",
+      "mcporter"
+    ],
+
+    // Skill-specific configuration
+    "config": {
+      "clawhub": {
+        "autoUpdate": true
+      },
+      "mcporter": {
+        "servers": []
+      }
+    }
+  },
+
+  // --------------------------------------------------------------------------
+  // Security Policy
+  // --------------------------------------------------------------------------
+  "security": {
+    // Default policy: deny | allow
+    "default": "deny",
+
+    // Filesystem access
+    "filesystem": {
+      "policy": "scoped",
+      "allowedPaths": [
+        "~/.openclaw/workspace",
+        "/tmp"
+      ],
+      "deniedPaths": [
+        "~/.ssh",
+        "~/.gnupg",
+        "~/.aws"
+      ]
+    },
+
+    // Network access
+    "network": {
+      "policy": "restricted",
+      "allowedHosts": [],
+      "deniedPorts": [22, 3389]
+    },
+
+    // Shell execution
+    "shell": {
+      "policy": "sandboxed",
+      "allowedCommands": [],
+      "deniedCommands": ["rm -rf", "sudo", "chmod 777"]
+    },
+
+    // Secrets management
+    "secrets": {
+      "policy": "vault-only",
+      "vault": "1password"  // or "env" for environment variables
+    }
+  },
+
+  // --------------------------------------------------------------------------
+  // Logging Configuration
+  // --------------------------------------------------------------------------
+  "logging": {
+    "level": "info",
+    "format": "json",
+    "outputs": ["console", "file"],
+    "file": {
+      "path": "~/.openclaw/logs/gateway.log",
+      "maxSize": "100m",
+      "maxFiles": 5
+    }
+  },
+
+  // --------------------------------------------------------------------------
+  // Telemetry (opt-in)
+  // --------------------------------------------------------------------------
+  "telemetry": {
+    "enabled": false,
+    "anonymous": true
+  }
+}
