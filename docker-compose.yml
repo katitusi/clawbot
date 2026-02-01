@@ -1,0 +1,267 @@
+# =============================================================================
+# OpenClaw/Clawbot Docker Compose - Production Configuration
+# =============================================================================
+# Best practices:
+# - Proper volume mounts for persistence
+# - Security constraints
+# - Health checks
+# - Logging configuration
+# =============================================================================
+
+services:
+  # ---------------------------------------------------------------------------
+  # OpenClaw Gateway - Main AI Agent Server
+  # ---------------------------------------------------------------------------
+  openclaw-gateway:
+    image: ${OPENCLAW_IMAGE:-openclaw:local}
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        - OPENCLAW_DOCKER_APT_PACKAGES=${OPENCLAW_DOCKER_APT_PACKAGES:-}
+    container_name: openclaw-gateway
+    restart: unless-stopped
+    
+    # Environment configuration
+    env_file:
+      - .env
+    environment:
+      - HOME=/home/node
+      - NODE_ENV=production
+      - TERM=xterm-256color
+      - LANG=C.UTF-8
+      # Gateway settings
+      - OPENCLAW_GATEWAY_BIND=${OPENCLAW_GATEWAY_BIND:-lan}
+      - OPENCLAW_GATEWAY_PORT=${OPENCLAW_GATEWAY_PORT:-18789}
+      - OPENCLAW_GATEWAY_TOKEN=${OPENCLAW_GATEWAY_TOKEN}
+      # XDG directories
+      - XDG_CONFIG_HOME=/home/node/.config
+      - XDG_DATA_HOME=/home/node/.local/share
+      - XDG_CACHE_HOME=/home/node/.cache
+      # Tool authentication (optional)
+      - GOG_KEYRING_PASSWORD=${GOG_KEYRING_PASSWORD:-}
+      # Model API Keys (add your keys to .env)
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
+      # Extended PATH for custom tools
+      - PATH=/home/linuxbrew/.linuxbrew/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+    
+    # Persistent volumes
+    volumes:
+      # OpenClaw configuration (agents, sessions, config)
+      - ${OPENCLAW_CONFIG_DIR:-~/.openclaw}:/home/node/.openclaw
+      # Workspace for agent operations
+      - ${OPENCLAW_WORKSPACE_DIR:-~/.openclaw/workspace}:/home/node/.openclaw/workspace
+      # Docker socket for sandbox container management
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      # ==========================================================================
+      # User Project Mounts - Map your local project folders here
+      # ==========================================================================
+      # Uncomment and modify the paths below for your projects:
+      # - /path/to/your/projects:/home/node/projects:rw
+      # 
+      # Windows paths example (use forward slashes or escaped backslashes):
+      # - C:/Users/username/Documents/projects:/home/node/projects:rw
+      # - C:/Users/username/code:/home/node/code:rw
+      #
+      # Specific project examples:
+      # - ${PROJECTS_PATH}:/home/node/projects:rw
+      # - ${ROS2_PATH}:/home/node/ros2:rw
+      # - ${NEXTJS_PATH}:/home/node/nextjs:rw
+    
+    # Port mappings
+    ports:
+      # Gateway WebSocket/HTTP port
+      # Use 127.0.0.1 prefix for local-only access (recommended for production)
+      - "${OPENCLAW_GATEWAY_HOST:-127.0.0.1}:${OPENCLAW_GATEWAY_PORT:-18789}:18789"
+      # Optional: Canvas host for mobile nodes
+      # - "18793:18793"
+    
+    # Gateway command
+    command:
+      - node
+      - dist/index.js
+      - gateway
+      - --bind
+      - ${OPENCLAW_GATEWAY_BIND:-lan}
+      - --port
+      - "18789"
+    
+    # Health check
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:18789/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+          cpus: '2'
+        reservations:
+          memory: 1G
+          cpus: '0.5'
+    
+    # Logging configuration
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "100m"
+        max-file: "5"
+    
+    # Security options
+    security_opt:
+      - no-new-privileges:true
+    
+    # Network
+    networks:
+      - openclaw-network
+
+  # ---------------------------------------------------------------------------
+  # OpenClaw CLI - Administrative Interface
+  # ---------------------------------------------------------------------------
+  openclaw-cli:
+    image: ${OPENCLAW_IMAGE:-openclaw:local}
+    container_name: openclaw-cli
+    profiles:
+      - cli
+    
+    env_file:
+      - .env
+    environment:
+      - HOME=/home/node
+      - NODE_ENV=production
+      - TERM=xterm-256color
+      - OPENCLAW_GATEWAY_TOKEN=${OPENCLAW_GATEWAY_TOKEN}
+      - PATH=/home/linuxbrew/.linuxbrew/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+    
+    volumes:
+      - ${OPENCLAW_CONFIG_DIR:-~/.openclaw}:/home/node/.openclaw
+      - ${OPENCLAW_WORKSPACE_DIR:-~/.openclaw/workspace}:/home/node/.openclaw/workspace
+    
+    # Interactive mode
+    stdin_open: true
+    tty: true
+    
+    # Default CLI entry
+    entrypoint: ["node", "dist/index.js"]
+    
+    networks:
+      - openclaw-network
+    
+    depends_on:
+      openclaw-gateway:
+        condition: service_healthy
+
+  # ---------------------------------------------------------------------------
+  # Telegram Bot Interface
+  # ---------------------------------------------------------------------------
+  telegram-bot:
+    build:
+      context: .
+      dockerfile: Dockerfile.telegram
+    image: clawbot-telegram:latest
+    container_name: clawbot-telegram
+    restart: unless-stopped
+    profiles:
+      - telegram
+    
+    env_file:
+      - .env
+    environment:
+      - NODE_ENV=production
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - TELEGRAM_ALLOWED_USERS=${TELEGRAM_ALLOWED_USERS}
+      - OPENCLAW_GATEWAY_URL=http://openclaw-gateway:18789
+      - OPENCLAW_GATEWAY_TOKEN=${OPENCLAW_GATEWAY_TOKEN}
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - HEALTH_PORT=3000
+    
+    # Health check port (internal only)
+    expose:
+      - "3000"
+    
+    # Health check
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.5'
+        reservations:
+          memory: 64M
+          cpus: '0.1'
+    
+    # Logging configuration
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "3"
+    
+    # Security options
+    security_opt:
+      - no-new-privileges:true
+    
+    networks:
+      - openclaw-network
+    
+    depends_on:
+      openclaw-gateway:
+        condition: service_healthy
+
+  # ---------------------------------------------------------------------------
+  # Sandbox Builder (one-time setup)
+  # ---------------------------------------------------------------------------
+  sandbox-builder:
+    build:
+      context: .
+      dockerfile: Dockerfile.sandbox
+    image: openclaw-sandbox:bookworm-slim
+    container_name: openclaw-sandbox-builder
+    profiles:
+      - setup
+    command: ["echo", "Sandbox image built successfully"]
+
+  # ---------------------------------------------------------------------------
+  # Browser Sandbox Builder (one-time setup)
+  # ---------------------------------------------------------------------------
+  browser-sandbox-builder:
+    build:
+      context: .
+      dockerfile: Dockerfile.sandbox-browser
+    image: openclaw-sandbox-browser:bookworm-slim
+    container_name: openclaw-browser-sandbox-builder
+    profiles:
+      - setup
+    command: ["echo", "Browser sandbox image built successfully"]
+
+# =============================================================================
+# Networks
+# =============================================================================
+networks:
+  openclaw-network:
+    driver: bridge
+    name: openclaw-network
+
+# =============================================================================
+# Named Volumes (optional - for full home persistence)
+# =============================================================================
+volumes:
+  openclaw_home:
+    driver: local
+  openclaw_config:
+    driver: local
+  openclaw_workspace:
+    driver: local

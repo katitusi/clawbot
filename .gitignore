@@ -1,0 +1,56 @@
+# =============================================================================
+# .gitignore for OpenClaw/Clawbot
+# =============================================================================
+
+# Environment files (contain secrets!)
+.env
+.env.local
+.env.*.local
+
+# OpenClaw directories (contain sessions, keys)
+.openclaw/
+~/.openclaw/
+
+# Docker
+docker-compose.extra.yml
+docker-compose.override.yml
+
+# Logs
+*.log
+logs/
+
+# Backups
+backups/
+*.tar.gz
+
+# Node.js
+node_modules/
+npm-debug.log*
+
+# Build artifacts
+dist/
+build/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Secrets and keys (NEVER commit these)
+*.key
+*.pem
+*.p12
+*.pfx
+secrets/
+credentials/

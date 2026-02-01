@@ -1,0 +1,48 @@
+# =============================================================================
+# OpenClaw Sandbox Image
+# =============================================================================
+# Lightweight, security-hardened container for agent execution
+# This image is used for isolated skill execution
+# =============================================================================
+
+FROM debian:bookworm-slim
+
+LABEL org.opencontainers.image.title="OpenClaw Sandbox"
+LABEL org.opencontainers.image.description="Security-hardened sandbox for AI agent skill execution"
+
+# Install minimal runtime dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    curl \
+    wget \
+    git \
+    jq \
+    coreutils \
+    grep \
+    procps \
+    # Python minimal
+    python3 \
+    # For network debugging (optional)
+    dnsutils \
+    && rm -rf /var/lib/apt/lists/* \
+    && apt-get clean
+
+# Create sandbox user
+RUN groupadd --gid 1000 sandbox \
+    && useradd --uid 1000 --gid 1000 -m sandbox
+
+# Create workspace directory
+RUN mkdir -p /workspace \
+    && chown sandbox:sandbox /workspace
+
+# Set environment
+ENV HOME=/home/sandbox
+ENV LANG=C.UTF-8
+ENV PATH="/usr/local/bin:/usr/bin:/bin"
+
+# Switch to non-root user
+USER sandbox
+WORKDIR /workspace
+
+# Default command
+CMD ["/bin/bash"]

@@ -1,0 +1,50 @@
+# =============================================================================
+# Clawbot Telegram Bot Dockerfile
+# =============================================================================
+# Lightweight container for Telegram bot interface
+# =============================================================================
+
+FROM node:20-bookworm-slim
+
+LABEL org.opencontainers.image.title="Clawbot Telegram Bot"
+LABEL org.opencontainers.image.description="Telegram bot interface for OpenClaw/Clawbot"
+LABEL maintainer="clawbot"
+
+# Install minimal dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    curl \
+    && rm -rf /var/lib/apt/lists/* \
+    && apt-get clean
+
+# Create non-root user
+RUN groupadd --gid 1000 botuser \
+    && useradd --uid 1000 --gid 1000 -m botuser
+
+WORKDIR /app
+
+# Copy package files first (for better caching)
+COPY --chown=botuser:botuser telegram-bot/package*.json ./
+
+# Install dependencies
+RUN npm ci --only=production 2>/dev/null || npm install --only=production
+
+# Copy bot code
+COPY --chown=botuser:botuser telegram-bot/*.js ./
+
+# Switch to non-root user
+USER botuser
+
+# Environment
+ENV NODE_ENV=production
+ENV HEALTH_PORT=3000
+
+# Expose health check port
+EXPOSE 3000
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
+    CMD curl -f http://localhost:3000/health || exit 1
+
+# Run bot
+CMD ["node", "index.js"]
